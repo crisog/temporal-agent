@@ -1,5 +1,5 @@
 {
-  "name": "crashproof-agent",
+  "name": "temporal-agent",
   "type": "module",
   "scripts": {
     "dev": "tsx watch src/server.ts",

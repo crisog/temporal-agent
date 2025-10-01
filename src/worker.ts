@@ -7,7 +7,7 @@ import * as activities from './activities';
 import { createWorkerConnection, getTemporalConfig } from './config/temporal';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
-import 'dotenv/config';
+import './env';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);

@@ -2,7 +2,7 @@ import { serve } from '@hono/node-server';
 import { Hono } from 'hono';
 import { agentRoutes } from './routes/agent';
 import { healthRoutes } from './routes/health';
-import 'dotenv/config';
+import { env } from './env';
 
 const app = new Hono();
 
@@ -10,9 +10,11 @@ const app = new Hono();
 app.route('/agent', agentRoutes);
 app.route('/health', healthRoutes);
 
+const port = parseInt(env.PORT);
+
 serve({
   fetch: app.fetch,
-  port: 3000
+  port
 }, (info) => {
   console.log(`Server is running on http://localhost:${info.port}`);
   console.log(`\nAvailable endpoints:`);
