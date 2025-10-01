@@ -1,6 +1,6 @@
 # Temporal Agent
 
-An AI agent powered by Temporal workflows and OpenAI.
+An AI agent powered by Temporal workflows and AI SDK 5.0.
 
 ## Setup
 
@@ -46,17 +46,48 @@ Visit: `http://localhost:3000`
 
 ## Available Endpoints
 
-- `POST /agent` - Start AI agent workflow (non-blocking)
-- `GET /agent/:workflowId` - Get workflow status and results
-- `POST /agent/execute` - Start and wait for workflow (blocking)
-- `POST /agent/stream` - Start workflow and stream progress (SSE)
-- `GET /agent/:workflowId/stream` - Stream progress for existing workflow (SSE)
-- `GET /health` - Health check
+**Start workflow (non-blocking):**
+```bash
+curl -X POST http://localhost:3000/agent \
+  -H "Content-Type: application/json" \
+  -d '{"prompt": "What is the weather in San Francisco in Celsius?"}'
+```
+
+**Get workflow status:**
+```bash
+curl http://localhost:3000/agent/{workflowId}
+```
+
+**Execute workflow (blocking):**
+```bash
+curl -X POST http://localhost:3000/agent/execute \
+  -H "Content-Type: application/json" \
+  -d '{"prompt": "What is the weather in San Francisco in Celsius?"}'
+```
+
+**Stream workflow progress (SSE):**
+```bash
+curl -X POST http://localhost:3000/agent/stream \
+  -H "Content-Type: application/json" \
+  -d '{"prompt": "What is the weather in San Francisco in Celsius?"}'
+```
+
+**Stream existing workflow:**
+```bash
+curl http://localhost:3000/agent/{workflowId}/stream
+```
+
+**Health check:**
+```bash
+curl http://localhost:3000/health
+```
 
 ## Scripts
 
-- `npm run dev` - Start API server with auto-reload
-- `npm run worker` - Start Temporal worker
-- `npm run worker.watch` - Start worker with auto-reload
-- `npm run build` - Build TypeScript to JavaScript
-- `npm start` - Run production build
+```bash
+npm run dev            # Start API server with auto-reload
+npm run worker         # Start Temporal worker
+npm run worker.watch   # Start worker with auto-reload
+npm run build          # Build TypeScript to JavaScript
+npm start              # Run production build
+```
