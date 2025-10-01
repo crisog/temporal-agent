@@ -72,6 +72,13 @@ curl -X POST http://localhost:3000/agent/stream \
   -d '{"prompt": "What is the weather in San Francisco in Celsius?"}'
 ```
 
+**Stream LLM tokens in real-time (SSE + Signal/Query):**
+```bash
+curl -N -X POST http://localhost:3000/agent/stream-tokens \
+  -H "Content-Type: application/json" \
+  -d '{"prompt": "What is the weather in Tokyo in Celsius?"}'
+```
+
 **Stream existing workflow:**
 ```bash
 curl http://localhost:3000/agent/{workflowId}/stream

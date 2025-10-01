@@ -25,13 +25,13 @@ async function run() {
     connection,
     namespace: config.namespace,
     taskQueue: 'ai-agent-queue',
-    workflowsPath: join(__dirname, 'workflows/agent.ts'),
+    workflowsPath: join(__dirname, 'workflows'),
     activities,
   });
 
   console.log('[Worker] Worker created successfully');
-  console.log('[Worker] Registered workflows: aiAgentWorkflow');
-  console.log('[Worker] Registered activities: runAIAgent');
+  console.log('[Worker] Registered workflows: aiAgentWorkflow, streamingAiAgentWorkflow');
+  console.log('[Worker] Registered activities: generateWithLLM, generateWithLLMStreaming, executeGetWeather, executeConvertToCelsius');
   console.log('[Worker] Listening on task queue: ai-agent-queue');
   console.log('[Worker] Starting worker...\n');
 

@@ -1,4 +1,4 @@
-export { generateWithLLM } from './llm';
+export { generateWithLLM, generateWithLLMStreaming } from './llm';
 export type { LLMGenerationInput, LLMGenerationResult, ToolCallInfo } from './llm';
 
 export { executeGetWeather } from './tools/weather';
