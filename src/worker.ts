@@ -2,8 +2,9 @@
 // This runs the workflows and executes activities
 // Can be scaled horizontally for more throughput
 
-import { Worker, NativeConnection } from '@temporalio/worker';
+import { Worker } from '@temporalio/worker';
 import * as activities from './activities';
+import { createWorkerConnection, getTemporalConfig } from './config/temporal';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import 'dotenv/config';
@@ -12,44 +13,19 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
 async function run() {
-  // Get Temporal connection details from environment
-  const address = process.env.TEMPORAL_ADDRESS || 'localhost:7233';
-  const namespace = process.env.TEMPORAL_NAMESPACE || 'default';
-  const apiKey = process.env.TEMPORAL_API_KEY;
-
-  console.log(`[Worker] Connecting to Temporal at ${address}`);
-  console.log(`[Worker] Using namespace: ${namespace}`);
-
-  // Configure connection
-  const connectionOptions: any = {
-    address: address,
-  };
-
-  if (apiKey) {
-    // Temporal Cloud with API key
-    connectionOptions.tls = true;
-    connectionOptions.apiKey = apiKey;
-    connectionOptions.metadata = {
-      'temporal-namespace': namespace,
-    };
-    console.log('[Worker] Using API key authentication');
-  } else {
-    // Local Temporal server
-    connectionOptions.tls = false;
-    console.log('[Worker] Using local Temporal server (no TLS)');
-  }
+  const config = getTemporalConfig();
 
   // Create connection
-  const connection = await NativeConnection.connect(connectionOptions);
+  const connection = await createWorkerConnection();
 
   console.log('[Worker] Connected successfully');
 
   // Create worker
   const worker = await Worker.create({
     connection,
-    namespace,
+    namespace: config.namespace,
     taskQueue: 'ai-agent-queue',
-    workflowsPath: join(__dirname, 'workflows.ts'),
+    workflowsPath: join(__dirname, 'workflows/agent.ts'),
     activities,
   });
 

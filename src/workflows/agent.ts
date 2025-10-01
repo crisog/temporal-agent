@@ -4,8 +4,27 @@
 // If the app crashes/redeploys, the workflow resumes from the last completed activity
 
 import { proxyActivities, defineQuery, setHandler } from '@temporalio/workflow';
-import type * as activities from './activities';
+import type * as activities from '../activities';
 import type { AssistantModelMessage, ToolModelMessage, UserModelMessage, ToolResultPart, ToolCallPart, JSONValue } from 'ai';
+
+// Workflow types
+export interface AgentInput {
+  prompt: string;
+  maxSteps?: number;
+}
+
+export interface ToolCallRecord {
+  toolName: string;
+  input: unknown;
+  result: unknown;
+  timestamp: number;
+}
+
+export interface AgentResult {
+  finalResponse: string;
+  toolCalls: ToolCallRecord[];
+  totalSteps: number;
+}
 
 // Define a query to get the current progress
 export const progressQuery = defineQuery<string>('progress');
@@ -25,24 +44,6 @@ const {
     maximumAttempts: 10,
   },
 });
-
-export interface AgentInput {
-  prompt: string;
-  maxSteps?: number;
-}
-
-export interface ToolCallRecord {
-  toolName: string;
-  input: unknown;
-  result: unknown;
-  timestamp: number;
-}
-
-export interface AgentResult {
-  finalResponse: string;
-  toolCalls: ToolCallRecord[];
-  totalSteps: number;
-}
 
 // Multi-step AI Agent workflow - each tool execution is a separate durable activity
 export async function aiAgentWorkflow(input: AgentInput): Promise<AgentResult> {
@@ -175,4 +176,3 @@ export async function aiAgentWorkflow(input: AgentInput): Promise<AgentResult> {
     totalSteps: stepCount,
   };
 }
-
