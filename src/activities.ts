@@ -100,9 +100,6 @@ export async function generateWithLLM(input: LLMGenerationInput): Promise<LLMGen
     tools,
   });
 
-  console.log(`[LLM Activity] Generation completed. Finish reason: ${result.finishReason}`);
-  console.log(`[LLM Activity] Tool calls: ${result.toolCalls.length}`);
-
   Context.current().heartbeat();
 
   return {
