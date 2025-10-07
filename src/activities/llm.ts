@@ -4,6 +4,17 @@ import { generateText, streamText, stepCountIs } from 'ai';
 import type { UserModelMessage, AssistantModelMessage, ToolModelMessage } from 'ai';
 import { tools } from '../tools';
 
+// Streaming types
+export interface StreamTokenPayload {
+  offset: number;
+  content: string;
+}
+
+export interface StreamingHeartbeat {
+  deliveredLength: number;
+  fullText: string;
+}
+
 // LLM activity types
 export interface LLMGenerationInput {
   prompt: string;
@@ -57,7 +68,8 @@ export async function generateWithLLM(input: LLMGenerationInput): Promise<LLMGen
 // Streaming version that sends tokens via Temporal client signals
 export async function generateWithLLMStreaming(input: LLMGenerationInput): Promise<LLMGenerationResult> {
   console.log(`[LLM Activity] Streaming response for: "${input.prompt}"`);
-  Context.current().heartbeat();
+  const ctx = Context.current();
+  ctx.heartbeat();
 
   if (!input.workflowId) {
     throw new Error('workflowId is required for streaming');
@@ -68,6 +80,11 @@ export async function generateWithLLMStreaming(input: LLMGenerationInput): Promi
 
   const client = await getTemporalClient();
   const handle = client.getHandle(input.workflowId);
+
+  const heartbeatState = ctx.info.heartbeatDetails as StreamingHeartbeat | undefined;
+  let deliveredLength = heartbeatState?.deliveredLength ?? 0;
+  let fullText = heartbeatState?.fullText ?? '';
+  let observedLength = 0;
 
   // Build messages array
   const messages = input.messages && input.messages.length > 0
@@ -82,19 +99,38 @@ export async function generateWithLLMStreaming(input: LLMGenerationInput): Promi
     toolChoice: 'none',
   });
 
-  let fullText = '';
-
   // Stream tokens and send signals
   for await (const chunk of result.textStream) {
-    fullText += chunk;
-    // Send signal to workflow with new token
-    await handle.signal('streamToken', chunk);
-    Context.current().heartbeat({ streamedSoFar: fullText });
+    const chunkLength = chunk.length;
+    const chunkStart = observedLength;
+    observedLength += chunkLength;
+
+    const alreadyDelivered = Math.max(Math.min(deliveredLength - chunkStart, chunkLength), 0);
+
+    if (alreadyDelivered >= chunkLength) {
+      continue;
+    }
+
+    const newContent = chunk.slice(alreadyDelivered);
+    if (newContent.length === 0) {
+      continue;
+    }
+
+    const payload: StreamTokenPayload = {
+      offset: deliveredLength,
+      content: newContent,
+    };
+
+    await handle.signal('streamToken', payload);
+
+    deliveredLength += newContent.length;
+    fullText += newContent;
+    ctx.heartbeat({ deliveredLength, fullText } satisfies StreamingHeartbeat);
   }
 
   const finishReason = await result.finishReason;
 
-  Context.current().heartbeat();
+  ctx.heartbeat({ deliveredLength, fullText } satisfies StreamingHeartbeat);
 
   return {
     toolCalls: [],

@@ -5,10 +5,11 @@ import { proxyActivities, defineQuery, defineSignal, setHandler } from '@tempora
 import type * as activities from '../activities';
 import type { AssistantModelMessage, ToolModelMessage, UserModelMessage, ToolResultPart, ToolCallPart, JSONValue } from 'ai';
 import type { AgentInput, AgentResult, ToolCallRecord } from './agent';
+import type { StreamTokenPayload } from '../activities/llm';
 
 // Streaming-specific queries and signals
 export const streamingTextQuery = defineQuery<string>('streamingText');
-export const streamTokenSignal = defineSignal<[string]>('streamToken');
+export const streamTokenSignal = defineSignal<[StreamTokenPayload]>('streamToken');
 export const streamingProgressQuery = defineQuery<string>('progress');
 
 // Proxy activities with retry configuration
@@ -33,12 +34,23 @@ export async function streamingAiAgentWorkflow(input: AgentInput): Promise<Agent
 
   let currentProgress = 'Starting AI agent...';
   let streamingText = '';
+  let lastAppliedOffset = 0;
 
   // Set up handlers
   setHandler(streamingProgressQuery, () => currentProgress);
   setHandler(streamingTextQuery, () => streamingText);
-  setHandler(streamTokenSignal, (token: string) => {
-    streamingText += token;
+  setHandler(streamTokenSignal, (payload: StreamTokenPayload) => {
+    if (payload.offset < lastAppliedOffset) {
+      return;
+    }
+
+    if (payload.offset > lastAppliedOffset) {
+      console.log(`[Streaming Workflow] Ignoring out-of-sequence token at offset ${payload.offset}, expected ${lastAppliedOffset}`);
+      return;
+    }
+
+    streamingText += payload.content;
+    lastAppliedOffset += payload.content.length;
   });
 
   const maxSteps = input.maxSteps || 5;
@@ -145,6 +157,7 @@ export async function streamingAiAgentWorkflow(input: AgentInput): Promise<Agent
     console.log(`[Streaming Workflow] Max steps reached, streaming final response`);
 
     streamingText = '';
+    lastAppliedOffset = 0;
     const finalLLMResult = await generateWithLLMStreaming({
       prompt: 'Please provide a final response based on the tool results.',
       messages,
@@ -159,6 +172,7 @@ export async function streamingAiAgentWorkflow(input: AgentInput): Promise<Agent
     console.log(`[Streaming Workflow] Streaming final response`);
 
     streamingText = '';
+    lastAppliedOffset = 0;
     const streamedResult = await generateWithLLMStreaming({
       prompt: input.prompt,
       messages,
