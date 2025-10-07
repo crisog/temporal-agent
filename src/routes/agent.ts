@@ -3,6 +3,7 @@ import { stream } from 'hono/streaming';
 import { nanoid } from 'nanoid';
 import { getTemporalClient } from '../config/temporal';
 import { aiAgentWorkflow, progressQuery } from '../workflows/agent';
+import { streamingAiAgentWorkflow, streamingTextQuery } from '../workflows/streaming-agent';
 import type { AgentInput } from '../workflows/agent';
 
 export const agentRoutes = new Hono();
@@ -215,6 +216,75 @@ agentRoutes.post('/stream', async (c) => {
       if (!isComplete) {
         // Poll every 500ms
         await new Promise(resolve => setTimeout(resolve, 500));
+      }
+    }
+  });
+});
+
+// Start workflow with LLM token streaming (polls streamingText query)
+agentRoutes.post('/stream-tokens', async (c) => {
+  const { prompt } = await c.req.json();
+
+  if (!prompt) {
+    return c.json({ error: 'prompt is required' }, 400);
+  }
+
+  const client = await getTemporalClient();
+  const workflowId = `agent-${nanoid()}`;
+
+  // Start the streaming workflow
+  const handle = await client.start(streamingAiAgentWorkflow, {
+    args: [{ prompt }],
+    taskQueue: 'ai-agent-queue',
+    workflowId,
+  });
+
+  console.log(`[API] Starting token streaming workflow ${workflowId}`);
+
+  // Return SSE stream that polls for streaming text
+  return stream(c, async (stream) => {
+    // Send workflow ID immediately
+    await stream.writeln(`data: ${JSON.stringify({ type: 'started', workflowId })}\n`);
+
+    // Poll for streaming text updates
+    let lastStreamedText = '';
+    let isComplete = false;
+
+    while (!isComplete) {
+      try {
+        // Query the workflow for streaming text
+        const streamedText = await handle.query(streamingTextQuery);
+
+        // Only send new tokens (delta)
+        if (streamedText !== lastStreamedText) {
+          const newTokens = streamedText.substring(lastStreamedText.length);
+          if (newTokens) {
+            await stream.writeln(`data: ${JSON.stringify({ type: 'token', content: newTokens })}\n`);
+            lastStreamedText = streamedText;
+          }
+        }
+
+        // Check if workflow is complete
+        const description = await handle.describe();
+        if (description.status.name === 'COMPLETED') {
+          const result = await handle.result();
+          await stream.writeln(`data: ${JSON.stringify({ type: 'complete', result })}\n`);
+          isComplete = true;
+        } else if (description.status.name !== 'RUNNING') {
+          await stream.writeln(`data: ${JSON.stringify({ type: 'error', message: `Workflow ${description.status.name}` })}\n`);
+          isComplete = true;
+        }
+      } catch (error: any) {
+        // Workflow might not be ready yet, continue polling
+        if (error.message?.includes('not found')) {
+          await new Promise(resolve => setTimeout(resolve, 100));
+          continue;
+        }
+      }
+
+      if (!isComplete) {
+        // Poll every 100ms for smoother streaming
+        await new Promise(resolve => setTimeout(resolve, 100));
       }
     }
   });

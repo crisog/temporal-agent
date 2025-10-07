@@ -3,7 +3,7 @@
 // Each tool execution is a separate activity for maximum durability
 // If the app crashes/redeploys, the workflow resumes from the last completed activity
 
-import { proxyActivities, defineQuery, setHandler } from '@temporalio/workflow';
+import { proxyActivities, defineQuery, defineSignal, setHandler } from '@temporalio/workflow';
 import type * as activities from '../activities';
 import type { AssistantModelMessage, ToolModelMessage, UserModelMessage, ToolResultPart, ToolCallPart, JSONValue } from 'ai';
 
@@ -49,7 +49,7 @@ const {
 export async function aiAgentWorkflow(input: AgentInput): Promise<AgentResult> {
   console.log(`[Workflow] Starting AI Agent for prompt: "${input.prompt}"`);
 
-  // Progress tracking for streaming
+  // Progress tracking
   let currentProgress = 'Starting AI agent...';
 
   // Set up query handler for progress
