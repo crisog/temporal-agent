@@ -2,44 +2,48 @@ import { Context } from '@temporalio/activity';
 import { openai } from '@ai-sdk/openai';
 import { generateText, streamText, stepCountIs } from 'ai';
 import type { UserModelMessage, AssistantModelMessage, ToolModelMessage } from 'ai';
+import { z } from 'zod';
 import { tools } from '../tools';
 
-// Streaming types
-export interface StreamTokenPayload {
-  offset: number;
-  content: string;
-}
+export const StreamTokenPayloadSchema = z.object({
+  offset: z.number(),
+  content: z.string(),
+});
 
-export interface StreamingHeartbeat {
-  deliveredLength: number;
-  fullText: string;
-}
+export const StreamingHeartbeatSchema = z.object({
+  deliveredLength: z.number(),
+  fullText: z.string(),
+});
 
-// LLM activity types
-export interface LLMGenerationInput {
-  prompt: string;
-  messages?: Array<UserModelMessage | AssistantModelMessage | ToolModelMessage>;
-  maxSteps?: number;
-  workflowId?: string; // For streaming - to send signals back
-}
+export const LLMGenerationInputSchema = z.object({
+  prompt: z.string(),
+  messages: z.array(z.any()).optional(),
+  maxSteps: z.number().optional(),
+  workflowId: z.string().optional(),
+});
 
-export interface ToolCallInfo {
-  toolCallId: string;
-  toolName: string;
-  input: unknown;
-}
+export const ToolCallInfoSchema = z.object({
+  toolCallId: z.string(),
+  toolName: z.string(),
+  input: z.unknown(),
+});
 
-export interface LLMGenerationResult {
-  toolCalls: ToolCallInfo[];
-  text: string;
-  finishReason: string;
-}
+export const LLMGenerationResultSchema = z.object({
+  toolCalls: z.array(ToolCallInfoSchema),
+  text: z.string(),
+  finishReason: z.string(),
+});
+
+export type StreamTokenPayload = z.infer<typeof StreamTokenPayloadSchema>;
+export type StreamingHeartbeat = z.infer<typeof StreamingHeartbeatSchema>;
+export type LLMGenerationInput = z.infer<typeof LLMGenerationInputSchema>;
+export type ToolCallInfo = z.infer<typeof ToolCallInfoSchema>;
+export type LLMGenerationResult = z.infer<typeof LLMGenerationResultSchema>;
 
 export async function generateWithLLM(input: LLMGenerationInput): Promise<LLMGenerationResult> {
   console.log(`[LLM Activity] Generating response for: "${input.prompt}"`);
   Context.current().heartbeat();
 
-  // Build messages array - if we have existing messages, use them; otherwise start with user prompt
   const messages = input.messages && input.messages.length > 0
     ? input.messages
     : [{ role: 'user' as const, content: input.prompt }];
@@ -65,7 +69,6 @@ export async function generateWithLLM(input: LLMGenerationInput): Promise<LLMGen
   };
 }
 
-// Streaming version that sends tokens via Temporal client signals
 export async function generateWithLLMStreaming(input: LLMGenerationInput): Promise<LLMGenerationResult> {
   console.log(`[LLM Activity] Streaming response for: "${input.prompt}"`);
   const ctx = Context.current();
@@ -75,7 +78,6 @@ export async function generateWithLLMStreaming(input: LLMGenerationInput): Promi
     throw new Error('workflowId is required for streaming');
   }
 
-  // Import temporal client to send signals
   const { getTemporalClient } = await import('../config/temporal');
 
   const client = await getTemporalClient();
@@ -86,7 +88,6 @@ export async function generateWithLLMStreaming(input: LLMGenerationInput): Promi
   let fullText = heartbeatState?.fullText ?? '';
   let observedLength = 0;
 
-  // Build messages array
   const messages = input.messages && input.messages.length > 0
     ? input.messages
     : [{ role: 'user' as const, content: input.prompt }];
@@ -99,7 +100,6 @@ export async function generateWithLLMStreaming(input: LLMGenerationInput): Promi
     toolChoice: 'none',
   });
 
-  // Stream tokens and send signals
   for await (const chunk of result.textStream) {
     const chunkLength = chunk.length;
     const chunkStart = observedLength;

@@ -1,18 +1,13 @@
-// Streaming AI Agent Workflow
-// This workflow uses streaming LLM responses with Signal+Query pattern
-
 import { proxyActivities, defineQuery, defineSignal, setHandler } from '@temporalio/workflow';
 import type * as activities from '../activities';
 import type { AssistantModelMessage, ToolModelMessage, UserModelMessage, ToolResultPart, ToolCallPart, JSONValue } from 'ai';
 import type { AgentInput, AgentResult, ToolCallRecord } from './agent';
 import type { StreamTokenPayload } from '../activities/llm';
 
-// Streaming-specific queries and signals
 export const streamingTextQuery = defineQuery<string>('streamingText');
 export const streamTokenSignal = defineSignal<[StreamTokenPayload]>('streamToken');
 export const streamingProgressQuery = defineQuery<string>('progress');
 
-// Proxy activities with retry configuration
 const {
   generateWithLLM,
   generateWithLLMStreaming,
@@ -36,7 +31,6 @@ export async function streamingAiAgentWorkflow(input: AgentInput): Promise<Agent
   let streamingText = '';
   let lastAppliedOffset = 0;
 
-  // Set up handlers
   setHandler(streamingProgressQuery, () => currentProgress);
   setHandler(streamingTextQuery, () => streamingText);
   setHandler(streamTokenSignal, (payload: StreamTokenPayload) => {
@@ -60,7 +54,6 @@ export async function streamingAiAgentWorkflow(input: AgentInput): Promise<Agent
   let stepCount = 0;
   let finalResponse = '';
 
-  // Get workflow ID to pass to streaming activity
   const workflowId = (await import('@temporalio/workflow')).workflowInfo().workflowId;
 
   while (stepCount < maxSteps) {
@@ -68,7 +61,6 @@ export async function streamingAiAgentWorkflow(input: AgentInput): Promise<Agent
     currentProgress = `Step ${stepCount}: Calling LLM...`;
     console.log(`[Streaming Workflow] Step ${stepCount}: Calling LLM`);
 
-    // Use regular generateText for tool-calling steps (crash-proof)
     const llmResult = await generateWithLLM({
       prompt: input.prompt,
       messages: messages.length > 0 ? messages : undefined,
@@ -77,14 +69,11 @@ export async function streamingAiAgentWorkflow(input: AgentInput): Promise<Agent
     console.log(`[Streaming Workflow] LLM returned ${llmResult.toolCalls.length} tool calls`);
 
     if (llmResult.toolCalls.length === 0) {
-      // No tool calls - this is likely the final response after tools
-      // Don't break yet, let it continue to streaming step
       finalResponse = llmResult.text;
       console.log(`[Streaming Workflow] No tool calls, will stream final response`);
       break;
     }
 
-    // Add assistant message with tool calls
     const toolCallParts: ToolCallPart[] = llmResult.toolCalls.map(tc => ({
       type: 'tool-call',
       toolCallId: tc.toolCallId,
@@ -97,7 +86,6 @@ export async function streamingAiAgentWorkflow(input: AgentInput): Promise<Agent
       content: toolCallParts,
     });
 
-    // Execute tools
     const toolResults: ToolResultPart[] = [];
 
     for (const toolCall of llmResult.toolCalls) {
@@ -150,9 +138,7 @@ export async function streamingAiAgentWorkflow(input: AgentInput): Promise<Agent
     }
   }
 
-  // Now stream the final response (whether from tool results or direct response)
   if (!finalResponse || finalResponse === '') {
-    // Edge case: if we got here without a final response, generate one
     currentProgress = 'Generating final response (streaming)...';
     console.log(`[Streaming Workflow] Max steps reached, streaming final response`);
 
@@ -166,8 +152,6 @@ export async function streamingAiAgentWorkflow(input: AgentInput): Promise<Agent
 
     finalResponse = finalLLMResult.text;
   } else {
-    // We have a text response, but let's re-stream it for consistency
-    // This allows the final answer to be streamed even if it came from generateText
     currentProgress = 'Streaming final response...';
     console.log(`[Streaming Workflow] Streaming final response`);
 

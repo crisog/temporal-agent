@@ -1,14 +1,17 @@
 import { Connection, WorkflowClient } from '@temporalio/client';
 import { NativeConnection } from '@temporalio/worker';
+import { z } from 'zod';
 import { env } from '../env';
 
 let client: WorkflowClient | null = null;
 
-interface TemporalConfig {
-  address: string;
-  namespace: string;
-  apiKey?: string;
-}
+export const TemporalConfigSchema = z.object({
+  address: z.string(),
+  namespace: z.string(),
+  apiKey: z.string().optional(),
+});
+
+export type TemporalConfig = z.infer<typeof TemporalConfigSchema>;
 
 export function getTemporalConfig(): TemporalConfig {
   return {

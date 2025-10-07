@@ -1,13 +1,17 @@
 import { Context } from '@temporalio/activity';
+import { z } from 'zod';
 
-export interface WeatherInput {
-  location: string;
-}
+export const WeatherInputSchema = z.object({
+  location: z.string(),
+});
 
-export interface WeatherOutput {
-  location: string;
-  temperature: number;
-}
+export const WeatherOutputSchema = z.object({
+  location: z.string(),
+  temperature: z.number(),
+});
+
+export type WeatherInput = z.infer<typeof WeatherInputSchema>;
+export type WeatherOutput = z.infer<typeof WeatherOutputSchema>;
 
 export async function executeGetWeather(input: WeatherInput): Promise<WeatherOutput> {
   console.log(`  [Tool Activity] Getting weather for ${input.location}`);

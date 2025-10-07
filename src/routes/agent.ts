@@ -8,7 +8,6 @@ import type { AgentInput } from '../workflows/agent';
 
 export const agentRoutes = new Hono();
 
-// Start a crash-proof AI agent workflow
 agentRoutes.post('/', async (c) => {
   const { prompt } = await c.req.json();
 
@@ -18,20 +17,16 @@ agentRoutes.post('/', async (c) => {
 
   const client = await getTemporalClient();
 
-  // Generate unique workflow ID
   const workflowId = `agent-${nanoid()}`;
 
   console.log(`[API] Starting workflow ${workflowId}`);
 
-  // Start the workflow (non-blocking)
   const handle = await client.start(aiAgentWorkflow, {
     args: [{ prompt }],
     taskQueue: 'ai-agent-queue',
     workflowId,
   });
 
-  // Return immediately with workflow ID
-  // Client can poll for results or use signals for streaming
   return c.json({
     workflowId: handle.workflowId,
     runId: handle.firstExecutionRunId,
@@ -40,7 +35,6 @@ agentRoutes.post('/', async (c) => {
   });
 });
 
-// Get workflow status and results
 agentRoutes.get('/:workflowId', async (c) => {
   const workflowId = c.req.param('workflowId');
 
@@ -49,7 +43,6 @@ agentRoutes.get('/:workflowId', async (c) => {
   try {
     const handle = client.getHandle(workflowId);
 
-    // Try to get the result (non-blocking check)
     const description = await handle.describe();
 
     if (description.status.name === 'COMPLETED') {
@@ -76,7 +69,6 @@ agentRoutes.get('/:workflowId', async (c) => {
   }
 });
 
-// Start workflow and wait for result (blocking)
 agentRoutes.post('/execute', async (c) => {
   const { prompt } = await c.req.json();
 
@@ -95,7 +87,6 @@ agentRoutes.post('/execute', async (c) => {
     workflowId,
   });
 
-  // Wait for result (this will survive app crashes!)
   const result = await handle.result();
 
   return c.json({
@@ -104,7 +95,6 @@ agentRoutes.post('/execute', async (c) => {
   });
 });
 
-// Stream workflow progress in real-time (SSE)
 agentRoutes.get('/:workflowId/stream', async (c) => {
   const workflowId = c.req.param('workflowId');
   const client = await getTemporalClient();
@@ -113,22 +103,18 @@ agentRoutes.get('/:workflowId/stream', async (c) => {
     try {
       const handle = client.getHandle(workflowId);
 
-      // Poll for progress updates
       let lastProgress = '';
       let isComplete = false;
 
       while (!isComplete) {
         try {
-          // Query the workflow for current progress
           const progress = await handle.query(progressQuery);
 
-          // Only send if progress changed
           if (progress !== lastProgress) {
             await stream.writeln(`data: ${JSON.stringify({ type: 'progress', message: progress })}\n`);
             lastProgress = progress;
           }
 
-          // Check if workflow is complete
           const description = await handle.describe();
           if (description.status.name === 'COMPLETED') {
             const result = await handle.result();
@@ -144,7 +130,6 @@ agentRoutes.get('/:workflowId/stream', async (c) => {
         }
 
         if (!isComplete) {
-          // Poll every 500ms
           await new Promise(resolve => setTimeout(resolve, 500));
         }
       }
@@ -154,7 +139,6 @@ agentRoutes.get('/:workflowId/stream', async (c) => {
   });
 });
 
-// Start workflow and stream results immediately
 agentRoutes.post('/stream', async (c) => {
   const { prompt } = await c.req.json();
 
@@ -165,7 +149,6 @@ agentRoutes.post('/stream', async (c) => {
   const client = await getTemporalClient();
   const workflowId = `agent-${nanoid()}`;
 
-  // Start the workflow
   const handle = await client.start(aiAgentWorkflow, {
     args: [{ prompt }],
     taskQueue: 'ai-agent-queue',
@@ -174,27 +157,21 @@ agentRoutes.post('/stream', async (c) => {
 
   console.log(`[API] Starting streaming workflow ${workflowId}`);
 
-  // Return SSE stream
   return stream(c, async (stream) => {
-    // Send workflow ID immediately
     await stream.writeln(`data: ${JSON.stringify({ type: 'started', workflowId })}\n`);
 
-    // Poll for progress updates
     let lastProgress = '';
     let isComplete = false;
 
     while (!isComplete) {
       try {
-        // Query the workflow for current progress
         const progress = await handle.query(progressQuery);
 
-        // Only send if progress changed
         if (progress !== lastProgress) {
           await stream.writeln(`data: ${JSON.stringify({ type: 'progress', message: progress })}\n`);
           lastProgress = progress;
         }
 
-        // Check if workflow is complete
         const description = await handle.describe();
         if (description.status.name === 'COMPLETED') {
           const result = await handle.result();
@@ -205,23 +182,19 @@ agentRoutes.post('/stream', async (c) => {
           isComplete = true;
         }
       } catch (error: any) {
-        // Workflow might not be ready yet, continue polling
         if (error.message?.includes('not found')) {
-          // Wait a bit for workflow to initialize
           await new Promise(resolve => setTimeout(resolve, 100));
           continue;
         }
       }
 
       if (!isComplete) {
-        // Poll every 500ms
         await new Promise(resolve => setTimeout(resolve, 500));
       }
     }
   });
 });
 
-// Start workflow with LLM token streaming (polls streamingText query)
 agentRoutes.post('/stream-tokens', async (c) => {
   const { prompt } = await c.req.json();
 
@@ -232,7 +205,6 @@ agentRoutes.post('/stream-tokens', async (c) => {
   const client = await getTemporalClient();
   const workflowId = `agent-${nanoid()}`;
 
-  // Start the streaming workflow
   const handle = await client.start(streamingAiAgentWorkflow, {
     args: [{ prompt }],
     taskQueue: 'ai-agent-queue',
@@ -241,21 +213,16 @@ agentRoutes.post('/stream-tokens', async (c) => {
 
   console.log(`[API] Starting token streaming workflow ${workflowId}`);
 
-  // Return SSE stream that polls for streaming text
   return stream(c, async (stream) => {
-    // Send workflow ID immediately
     await stream.writeln(`data: ${JSON.stringify({ type: 'started', workflowId })}\n`);
 
-    // Poll for streaming text updates
     let lastStreamedText = '';
     let isComplete = false;
 
     while (!isComplete) {
       try {
-        // Query the workflow for streaming text
         const streamedText = await handle.query(streamingTextQuery);
 
-        // Only send new tokens (delta)
         if (streamedText !== lastStreamedText) {
           const newTokens = streamedText.substring(lastStreamedText.length);
           if (newTokens) {
@@ -264,7 +231,6 @@ agentRoutes.post('/stream-tokens', async (c) => {
           }
         }
 
-        // Check if workflow is complete
         const description = await handle.describe();
         if (description.status.name === 'COMPLETED') {
           const result = await handle.result();
@@ -275,7 +241,6 @@ agentRoutes.post('/stream-tokens', async (c) => {
           isComplete = true;
         }
       } catch (error: any) {
-        // Workflow might not be ready yet, continue polling
         if (error.message?.includes('not found')) {
           await new Promise(resolve => setTimeout(resolve, 100));
           continue;
@@ -283,7 +248,6 @@ agentRoutes.post('/stream-tokens', async (c) => {
       }
 
       if (!isComplete) {
-        // Poll every 100ms for smoother streaming
         await new Promise(resolve => setTimeout(resolve, 100));
       }
     }

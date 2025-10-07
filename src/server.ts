@@ -6,7 +6,6 @@ import { env } from './env';
 
 const app = new Hono();
 
-// Mount routes
 app.route('/agent', agentRoutes);
 app.route('/health', healthRoutes);
 

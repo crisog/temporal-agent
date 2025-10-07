@@ -1,12 +1,16 @@
 import { Context } from '@temporalio/activity';
+import { z } from 'zod';
 
-export interface CelsiusInput {
-  temperature: number;
-}
+export const CelsiusInputSchema = z.object({
+  temperature: z.number(),
+});
 
-export interface CelsiusOutput {
-  celsius: number;
-}
+export const CelsiusOutputSchema = z.object({
+  celsius: z.number(),
+});
+
+export type CelsiusInput = z.infer<typeof CelsiusInputSchema>;
+export type CelsiusOutput = z.infer<typeof CelsiusOutputSchema>;
 
 export async function executeConvertToCelsius(input: CelsiusInput): Promise<CelsiusOutput> {
   console.log(`  [Tool Activity] Converting ${input.temperature}°F to Celsius`);

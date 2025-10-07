@@ -1,35 +1,32 @@
-// Crash-proof AI Agent Workflow
-// This workflow orchestrates AI tool calls as durable activities
-// Each tool execution is a separate activity for maximum durability
-// If the app crashes/redeploys, the workflow resumes from the last completed activity
-
 import { proxyActivities, defineQuery, defineSignal, setHandler } from '@temporalio/workflow';
+import { z } from 'zod';
 import type * as activities from '../activities';
 import type { AssistantModelMessage, ToolModelMessage, UserModelMessage, ToolResultPart, ToolCallPart, JSONValue } from 'ai';
 
-// Workflow types
-export interface AgentInput {
-  prompt: string;
-  maxSteps?: number;
-}
+export const AgentInputSchema = z.object({
+  prompt: z.string(),
+  maxSteps: z.number().optional(),
+});
 
-export interface ToolCallRecord {
-  toolName: string;
-  input: unknown;
-  result: unknown;
-  timestamp: number;
-}
+export const ToolCallRecordSchema = z.object({
+  toolName: z.string(),
+  input: z.unknown(),
+  result: z.unknown(),
+  timestamp: z.number(),
+});
 
-export interface AgentResult {
-  finalResponse: string;
-  toolCalls: ToolCallRecord[];
-  totalSteps: number;
-}
+export const AgentResultSchema = z.object({
+  finalResponse: z.string(),
+  toolCalls: z.array(ToolCallRecordSchema),
+  totalSteps: z.number(),
+});
 
-// Define a query to get the current progress
+export type AgentInput = z.infer<typeof AgentInputSchema>;
+export type ToolCallRecord = z.infer<typeof ToolCallRecordSchema>;
+export type AgentResult = z.infer<typeof AgentResultSchema>;
+
 export const progressQuery = defineQuery<string>('progress');
 
-// Proxy activities with retry configuration
 const {
   generateWithLLM,
   executeGetWeather,
@@ -45,14 +42,10 @@ const {
   },
 });
 
-// Multi-step AI Agent workflow - each tool execution is a separate durable activity
 export async function aiAgentWorkflow(input: AgentInput): Promise<AgentResult> {
   console.log(`[Workflow] Starting AI Agent for prompt: "${input.prompt}"`);
 
-  // Progress tracking
   let currentProgress = 'Starting AI agent...';
-
-  // Set up query handler for progress
   setHandler(progressQuery, () => currentProgress);
 
   const maxSteps = input.maxSteps || 5;
@@ -62,13 +55,11 @@ export async function aiAgentWorkflow(input: AgentInput): Promise<AgentResult> {
   let stepCount = 0;
   let finalResponse = '';
 
-  // Multi-step loop: LLM generates -> execute tools as separate activities -> repeat
   while (stepCount < maxSteps) {
     stepCount++;
     currentProgress = `Step ${stepCount}: Calling LLM...`;
     console.log(`[Workflow] Step ${stepCount}: Generating with LLM`);
 
-    // Step 1: Call LLM (separate activity)
     const llmResult = await generateWithLLM({
       prompt: input.prompt,
       messages: messages.length > 0 ? messages : undefined,
@@ -76,14 +67,12 @@ export async function aiAgentWorkflow(input: AgentInput): Promise<AgentResult> {
 
     console.log(`[Workflow] LLM returned ${llmResult.toolCalls.length} tool calls`);
 
-    // If no tool calls, we're done
     if (llmResult.toolCalls.length === 0) {
       finalResponse = llmResult.text;
       console.log(`[Workflow] No tool calls, final response generated`);
       break;
     }
 
-    // Add assistant message with tool calls
     const toolCallParts: ToolCallPart[] = llmResult.toolCalls.map(tc => ({
       type: 'tool-call',
       toolCallId: tc.toolCallId,
@@ -96,7 +85,6 @@ export async function aiAgentWorkflow(input: AgentInput): Promise<AgentResult> {
       content: toolCallParts,
     });
 
-    // Step 2: Execute each tool as a separate durable activity
     const toolResults: ToolResultPart[] = [];
 
     for (const toolCall of llmResult.toolCalls) {
@@ -105,7 +93,6 @@ export async function aiAgentWorkflow(input: AgentInput): Promise<AgentResult> {
 
       let toolResult: unknown;
 
-      // Execute the appropriate activity based on tool name
       switch (toolCall.toolName) {
         case 'getWeather':
           toolResult = await executeGetWeather(toolCall.input as activities.WeatherInput);
@@ -120,7 +107,6 @@ export async function aiAgentWorkflow(input: AgentInput): Promise<AgentResult> {
 
       console.log(`[Workflow] Tool ${toolCall.toolName} completed`);
 
-      // Track tool call and result
       allToolCalls.push({
         toolName: toolCall.toolName,
         input: toolCall.input,
@@ -128,7 +114,6 @@ export async function aiAgentWorkflow(input: AgentInput): Promise<AgentResult> {
         timestamp: Date.now(),
       });
 
-      // Add to tool results for next LLM call
       toolResults.push({
         type: 'tool-result',
         toolCallId: toolCall.toolCallId,
@@ -140,13 +125,11 @@ export async function aiAgentWorkflow(input: AgentInput): Promise<AgentResult> {
       });
     }
 
-    // Add tool results to messages
     messages.push({
       role: 'tool',
       content: toolResults,
     });
 
-    // If LLM also generated text (not just tool calls), check if we should continue
     if (llmResult.text && llmResult.finishReason === 'stop') {
       finalResponse = llmResult.text;
       console.log(`[Workflow] LLM generated final response after tools`);
@@ -154,7 +137,6 @@ export async function aiAgentWorkflow(input: AgentInput): Promise<AgentResult> {
     }
   }
 
-  // If we exhausted steps without getting a final response, call LLM one more time
   if (!finalResponse) {
     currentProgress = 'Generating final response...';
     console.log(`[Workflow] Max steps reached, generating final response`);
